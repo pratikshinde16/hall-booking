@@ -1,126 +1,154 @@
-import express from "express"
-const PORT=4000;
-const app=express();
+const express = require('express');
+const app = express();
 app.use(express.json());
 
-const room={
-    NumberofSeatsavailable:100,
-    Amenities_in_room:"A/C or Non-Ac, Attached Bathroom, TV, Dining Facility",
-    Price_1_hour:1000,
-};
-
-const data=[
-    {
-        RoomName:"Deluxe",
-        Room_Id:101,
-        Booked_status:"Booked",
-        Customer_Name:"Rajesh",
-        Booked_Date:"25/07/2023",
-        Entry_Time:"11.00 AM",
-        Exit_Time:"8:00 PM"
-    },
-    {
-        RoomName:"Deluxe",
-        Room_Id:102,
-        Booked_status:"Booked",
-        Customer_Name:"Ram",
-        Booked_Date:"25/07/2023",
-        Entry_Time:"10.00 AM",
-        Exit_Time:"10:00 PM"
-    },
-    {
-        RoomName:"Deluxe",
-        Room_Id:103,
-        Booked_status:"Booked",
-        Customer_Name:"Amit",
-        Booked_Date:"25/07/2023",
-        Entry_Time:"9.00 AM",
-        Exit_Time:"8:00 PM"
-    },
-    {
-      RoomName:"Non-Deluxe",
-      Room_Id:201,
-      Booked_status:"Booked",
-      Customer_Name:"Sam",
-      Booked_Date:"25/07/2023",
-      Entry_Time:"10.00 AM",
-      Exit_Time:"7:00 PM"
+const rooms = [
+  {
+    id: 101,
+    numberOfSeats: 50,
+    amenities: "A/C, Projector, WiFi",
+    pricePerHour: 1000,
   },
   {
-    RoomName:"Non-Deluxe",
-    Room_Id:202,
-    Booked_status:"Booked",
-    Customer_Name:"Vaibhav",
-    Booked_Date:"25/07/2023",
-    Entry_Time:"8.00 AM",
-    Exit_Time:"8:00 PM"
+    id: 102,
+    numberOfSeats: 30,
+    amenities: "A/C, Whiteboard",
+    pricePerHour: 800,
   },
-  {
-  RoomName:"Non-Deluxe",
-  Room_Id:203,
-  Booked_status:"Booked",
-  Customer_Name:"Abhi",
-  Booked_Date:"25/07/2023",
-  Entry_Time:"7.00 AM",
-  Exit_Time:"5:00 PM"
-  },
-    
+];
 
-]
+const bookings = [];
 
-app.get("/",function(request,response){
-  response.send('Welcome to Hall Booking App')
-})
+// Helper function to generate a unique room ID
+let nextRoomId = 103;
+function generateRoomId() {
+  return nextRoomId++;
+}
 
+// Helper function to get the current date in "YYYY-MM-DD" format
+function getCurrentDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-//Getting all rooms and booking status
-app.get("/roomData",function(request,response){
-  request.send(data);
-})
+// Helper function to generate a unique booking ID
+let nextBookingId = 1;
+function generateBookingId() {
+  return nextBookingId++;
+}
 
-//Room details
-app.get("/rooms", function(request,response){
-  response.send(room);
-})
+//Home page
+app.get("/", function (request, response) {
+  response.send('Welcome to Hall Booking App');
+});
 
-//Booking Room (Booking date -> Not Match)
-app.get("/booked-details", function(request,response){
-  const obj=data.map(
-    ({Room_Id,Customer_Name,Booked_Date,Entry_Time,Exit_Time})=>{
-      const cd={
-        Room_Id:Room_Id,
-        Customer_Name:Customer_Name,
-        Booked_Date:Booked_Date,
-        Entry_Time:Entry_Time,
-        Exit_Time:Exit_Time,
-      }
-      return cd;
-    }
-  )
-})
+// Endpoint to create a new room
+app.post("/rooms", function (req, res) {
+  const { numberOfSeats, amenities, pricePerHour } = req.body;
+  const newRoom = {
+    id: generateRoomId(),
+    numberOfSeats,
+    amenities,
+    pricePerHour,
+  };
+  rooms.push(newRoom);
+  res.send(newRoom);
+});
 
-//Check Availability 
+// Endpoint to book a room
+app.post("/bookings", function (req, res) {
+  const { customerName, date, startTime, endTime, roomId } = req.body;
+  const room = rooms.find((room) => room.id === roomId);
 
-app.post("/to-book-hall", express.json(), function(request,response){
-  let count=0;
-  const newData=request.body;
-  data.filter(({Booked_Date,Entry_Time,Exit_Time})=>{
-    if(
-      Booked_Date === newData.Booked_Date &&
-      Entry_Time === newData.Entry_Time && 
-      Exit_Time === newData.Exit_Time
-    ){
-      count++;
-    }
-  })
-  if(count==0) {
-    data.push(newData);
-    response.send("Data Added Successfully");
-  }else{
-    response.send('Sorry! There is no available Room on this particular Date and time');
+  if (!room) {
+    res.status(404).send("Room not found.");
+    return;
   }
-  console.log(newData)
-  console.log(count)
-})
+
+  const isRoomAlreadyBooked = bookings.some(
+    (booking) =>
+      booking.roomId === roomId &&
+      booking.date === date &&
+      ((booking.startTime >= startTime && booking.startTime < endTime) ||
+        (booking.endTime > startTime && booking.endTime <= endTime) ||
+        (booking.startTime <= startTime && booking.endTime >= endTime))
+  );
+
+  if (isRoomAlreadyBooked) {
+    res.status(400).send("Room is already booked at this time.");
+    return;
+  }
+
+  const newBooking = {
+    id: generateBookingId(),
+    customerName,
+    date,
+    startTime,
+    endTime,
+    roomId,
+  };
+  bookings.push(newBooking);
+  res.send(newBooking);
+});
+
+// Endpoint to list all rooms with booked data
+app.get("/rooms-with-bookings", function (req, res) {
+  const roomsWithBookings = rooms.map((room) => {
+    const bookedData = bookings.filter((booking) => booking.roomId === room.id);
+    return {
+      roomName: `Room ${room.id}`,
+      bookedData,
+    };
+  });
+  res.send(roomsWithBookings);
+});
+
+// Endpoint to list all customers with their booked data
+app.get("/customers-with-bookings", function (req, res) {
+  const customersWithBookings = bookings.map((booking) => {
+    const room = rooms.find((room) => room.id === booking.roomId);
+    return {
+      customerName: booking.customerName,
+      roomName: `Room ${room.id}`,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      bookingId: booking.id,
+      bookingDate: booking.date, // Use the actual booking date from the booking data
+      bookingStatus: "Booked",
+    };
+  });
+  res.send(customersWithBookings);
+});
+
+// Endpoint to list how many times a customer has booked a room
+app.get("/customer-booking-count", function (req, res) {
+  const customerBookingCount = {};
+  bookings.forEach((booking) => {
+    const key = `${booking.customerName}-${booking.roomId}`;
+    if (!customerBookingCount[key]) {
+      customerBookingCount[key] = {
+        customerName: booking.customerName,
+        roomName: `Room ${booking.roomId}`,
+        date: booking.date,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        bookingId: booking.id,
+        bookingDate: booking.date, // Use the actual booking date from the booking data
+        bookingStatus: "Booked",
+        bookings: 1,
+      };
+    } else {
+      customerBookingCount[key].bookings++;
+    }
+  });
+  res.send(Object.values(customerBookingCount));
+});
+
+const PORT = process.env.PORT || 7000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 
